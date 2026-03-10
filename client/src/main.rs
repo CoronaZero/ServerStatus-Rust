@@ -76,17 +76,56 @@ pub struct Args {
     )]
     disable_ping: bool,
     #[arg(
+        long = "disable-ping-v4",
+        env = "SSR_DISABLE_PING_V4",
+        help = "disable IPv4 ping probe"
+    )]
+    disable_ping_v4: bool,
+    #[arg(
+        long = "disable-ping-v6",
+        env = "SSR_DISABLE_PING_V6",
+        help = "disable IPv6 ping probe"
+    )]
+    disable_ping_v6: bool,
+    #[arg(
+        long = "disable-ping-all",
+        help = "disable both IPv4 and IPv6 ping probe"
+    )]
+    disable_ping_all: bool,
+    #[arg(
         long = "disable-extra",
         env = "SSR_DISABLE_EXTRA",
         help = "disable extra info report, default:false"
     )]
     disable_extra: bool,
-    #[arg(long = "ct",  env = "SSR_CT_ADDR", default_value = CT, help = "China Telecom probe addr")]
+    // 全局探测地址（同时设置 v4 和 v6）
+    #[arg(long = "ct",  env = "SSR_CT", default_value = CT, help = "CT probe addr (v4+v6)")]
     ct_addr: String,
-    #[arg(long = "cm",  env = "SSR_CM_ADDR", default_value = CM, help = "China Mobile probe addr")]
+    #[arg(long = "cm",  env = "SSR_CM", default_value = CM, help = "CM probe addr (v4+v6)")]
     cm_addr: String,
-    #[arg(long = "cu",  env = "SSR_CU_ADDR", default_value = CU, help = "China Unicom probe addr")]
+    #[arg(long = "cu",  env = "SSR_CU", default_value = CU, help = "CU probe addr (v4+v6)")]
     cu_addr: String,
+    // IPv4 独立设置（优先级高于全局）
+    #[arg(long = "ct-v4",  env = "SSR_CT_V4", help = "CT IPv4 probe addr (override --ct)")]
+    ct_v4: Option<String>,
+    #[arg(long = "cm-v4",  env = "SSR_CM_V4", help = "CM IPv4 probe addr (override --cm)")]
+    cm_v4: Option<String>,
+    #[arg(long = "cu-v4",  env = "SSR_CU_V4", help = "CU IPv4 probe addr (override --cu)")]
+    cu_v4: Option<String>,
+    // IPv6 独立设置（优先级高于全局）
+    #[arg(long = "ct-v6",  env = "SSR_CT_V6", help = "CT IPv6 probe addr (override --ct)")]
+    ct_v6: Option<String>,
+    #[arg(long = "cm-v6",  env = "SSR_CM_V6", help = "CM IPv6 probe addr (override --cm)")]
+    cm_v6: Option<String>,
+    #[arg(long = "cu-v6",  env = "SSR_CU_V6", help = "CU IPv6 probe addr (override --cu)")]
+    cu_v6: Option<String>,
+    // 绑定网卡（支持全局 + 分别设置，Linux only）
+    #[arg(long = "ping-device", env = "SSR_PING_DEVICE", help = "bind device for both IPv4/IPv6 ping (Linux only)")]
+    ping_device: Option<String>,
+    #[arg(long = "ping-v4-device", env = "SSR_PING_V4_DEVICE", help = "bind device for IPv4 ping (override --ping-device, Linux only)")]
+    ping_v4_device: Option<String>,
+    #[arg(long = "ping-v6-device", env = "SSR_PING_V6_DEVICE", help = "bind device for IPv6 ping (override --ping-device, Linux only)")]
+    ping_v6_device: Option<String>,
     #[arg(long = "sys-info", help = "show sys info, default:false")]
     sys_info: bool,
     #[arg(long = "ip-info", help = "show ip info, default:false")]

@@ -112,6 +112,14 @@ message StatRequest {
   // false: KiB (1024), true: KB (1000)
   bool si = 45;
   repeated DiskInfo disks = 46;
+
+  // IPv6 三网探测数据
+  double ping_10010_v6 = 47;
+  double ping_189_v6 = 48;
+  double ping_10086_v6 = 49;
+  double time_10010_v6 = 50;
+  double time_189_v6 = 51;
+  double time_10086_v6 = 52;
 }
 
 message Response {

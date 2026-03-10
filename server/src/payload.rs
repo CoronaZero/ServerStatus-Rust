@@ -44,6 +44,14 @@ pub struct HostStat {
     pub time_189: f64,
     pub time_10086: f64,
 
+    // IPv6 三网数据
+    pub ping_10010_v6: f64,
+    pub ping_189_v6: f64,
+    pub ping_10086_v6: f64,
+    pub time_10010_v6: f64,
+    pub time_189_v6: f64,
+    pub time_10086_v6: f64,
+
     #[serde(rename(deserialize = "tcp"))]
     pub tcp_count: u32,
     #[serde(rename(deserialize = "udp"))]

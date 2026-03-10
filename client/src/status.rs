@@ -2,6 +2,7 @@
 #![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::similar_names, clippy::many_single_char_names)]
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fs;
@@ -9,7 +10,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::ErrorKind::ConnectionRefused;
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream};
 use std::net::{Shutdown, ToSocketAddrs};
 use std::process::Command;
 use std::str;
@@ -294,17 +295,51 @@ pub struct PingData {
     pub ping_time: u32,
 }
 
-fn start_ping_collect_t(data: &Arc<Mutex<PingData>>) {
+/// 创建绑定网卡的 TCP 连接（仅 Linux 支持绑定网卡）
+fn connect_timeout_bound(
+    addr: &SocketAddr,
+    timeout: Duration,
+    bind_device: Option<&str>,
+) -> std::io::Result<TcpStream> {
+    let socket = Socket::new(Domain::for_address(*addr), Type::STREAM, Some(Protocol::TCP))?;
+
+    // 绑定网卡 (仅 Linux 支持)
+    if let Some(device) = bind_device {
+        #[cfg(target_os = "linux")]
+        socket.bind_device(Some(device.as_bytes()))?;
+    }
+
+    socket.set_nonblocking(true)?;
+    socket.connect_timeout(addr, timeout)?;
+    socket.set_nonblocking(false)?;
+
+    Ok(TcpStream::from(socket))
+}
+
+fn start_ping_collect_t(
+    data: &Arc<Mutex<PingData>>,
+    bind_device: Option<String>,
+    ipv4_only: bool,
+    ipv6_only: bool,
+) {
     let mut package_list: LinkedList<i32> = LinkedList::new();
     let mut package_lost: u32 = 0;
     let pt = &*data.lock().unwrap();
+
+    // 地址解析 + 过滤
     let addr = pt
         .probe_uri
         .to_socket_addrs()
         .unwrap()
+        .filter(|addr| match (ipv4_only, ipv6_only) {
+            (true, false) => addr.is_ipv4(),
+            (false, true) => addr.is_ipv6(),
+            _ => true,
+        })
         .next()
         .expect("can't get addr info");
-    info!("{} => {:?}", pt.probe_uri, addr);
+
+    info!("{} => {:?} (bound device: {:?})", pt.probe_uri, addr, bind_device);
 
     let ping_data = data.clone();
     thread::spawn(move || loop {
@@ -313,7 +348,7 @@ fn start_ping_collect_t(data: &Arc<Mutex<PingData>>) {
         }
 
         let instant = Instant::now();
-        match TcpStream::connect_timeout(&addr, Duration::from_millis(TIMEOUT_MS)) {
+        match connect_timeout_bound(&addr, Duration::from_millis(TIMEOUT_MS), bind_device.as_deref()) {
             Ok(s) => {
                 let _ = s.shutdown(Shutdown::Both);
                 package_list.push_back(1);
@@ -345,7 +380,13 @@ pub static G_PING_10010: OnceCell<Arc<Mutex<PingData>>> = OnceCell::new();
 pub static G_PING_189: OnceCell<Arc<Mutex<PingData>>> = OnceCell::new();
 pub static G_PING_10086: OnceCell<Arc<Mutex<PingData>>> = OnceCell::new();
 
+// IPv6 三网探测数据
+pub static G_PING_10010_V6: OnceCell<Arc<Mutex<PingData>>> = OnceCell::new();
+pub static G_PING_189_V6: OnceCell<Arc<Mutex<PingData>>> = OnceCell::new();
+pub static G_PING_10086_V6: OnceCell<Arc<Mutex<PingData>>> = OnceCell::new();
+
 pub fn start_all_ping_collect_t(args: &Args) {
+    // 初始化 IPv4 探测数据
     G_PING_10010
         .set(Arc::new(Mutex::new(PingData {
             probe_uri: args.cu_addr.clone(),
@@ -368,10 +409,50 @@ pub fn start_all_ping_collect_t(args: &Args) {
         })))
         .unwrap();
 
-    if !args.disable_ping {
-        start_ping_collect_t(G_PING_10010.get().unwrap());
-        start_ping_collect_t(G_PING_189.get().unwrap());
-        start_ping_collect_t(G_PING_10086.get().unwrap());
+    // 初始化 IPv6 探测数据
+    G_PING_10010_V6
+        .set(Arc::new(Mutex::new(PingData {
+            probe_uri: args.cu_v6.clone().unwrap_or_else(|| args.cu_addr.clone()),
+            lost_rate: 0,
+            ping_time: 0,
+        })))
+        .unwrap();
+    G_PING_189_V6
+        .set(Arc::new(Mutex::new(PingData {
+            probe_uri: args.ct_v6.clone().unwrap_or_else(|| args.ct_addr.clone()),
+            lost_rate: 0,
+            ping_time: 0,
+        })))
+        .unwrap();
+    G_PING_10086_V6
+        .set(Arc::new(Mutex::new(PingData {
+            probe_uri: args.cm_v6.clone().unwrap_or_else(|| args.cm_addr.clone()),
+            lost_rate: 0,
+            ping_time: 0,
+        })))
+        .unwrap();
+
+    // 判断是否禁用 ping
+    let disable_all = args.disable_ping_all || args.disable_ping;
+    let disable_v4 = disable_all || args.disable_ping_v4;
+    let disable_v6 = disable_all || args.disable_ping_v6;
+
+    // 获取绑定设备
+    let ping_v4_device = args.ping_v4_device.clone().or_else(|| args.ping_device.clone());
+    let ping_v6_device = args.ping_v6_device.clone().or_else(|| args.ping_device.clone());
+
+    // 启动 IPv4 探测
+    if !disable_v4 {
+        start_ping_collect_t(G_PING_10010.get().unwrap(), ping_v4_device.clone(), true, false);
+        start_ping_collect_t(G_PING_189.get().unwrap(), ping_v4_device.clone(), true, false);
+        start_ping_collect_t(G_PING_10086.get().unwrap(), ping_v4_device.clone(), true, false);
+    }
+
+    // 启动 IPv6 探测
+    if !disable_v6 {
+        start_ping_collect_t(G_PING_10010_V6.get().unwrap(), ping_v6_device.clone(), false, true);
+        start_ping_collect_t(G_PING_189_V6.get().unwrap(), ping_v6_device.clone(), false, true);
+        start_ping_collect_t(G_PING_10086_V6.get().unwrap(), ping_v6_device.clone(), false, true);
     }
 }
 
@@ -420,6 +501,7 @@ pub fn sample(args: &Args, stat: &mut StatRequest) {
         stat.network_rx = o.netrx;
         stat.network_tx = o.nettx;
     }
+    // IPv4 三网数据
     {
         let o = &*G_PING_10010.get().unwrap().lock().unwrap();
         stat.ping_10010 = o.lost_rate.into();
@@ -434,5 +516,21 @@ pub fn sample(args: &Args, stat: &mut StatRequest) {
         let o = &*G_PING_10086.get().unwrap().lock().unwrap();
         stat.ping_10086 = o.lost_rate.into();
         stat.time_10086 = o.ping_time.into();
+    }
+    // IPv6 三网数据
+    {
+        let o = &*G_PING_10010_V6.get().unwrap().lock().unwrap();
+        stat.ping_10010_v6 = o.lost_rate.into();
+        stat.time_10010_v6 = o.ping_time.into();
+    }
+    {
+        let o = &*G_PING_189_V6.get().unwrap().lock().unwrap();
+        stat.ping_189_v6 = o.lost_rate.into();
+        stat.time_189_v6 = o.ping_time.into();
+    }
+    {
+        let o = &*G_PING_10086_V6.get().unwrap().lock().unwrap();
+        stat.ping_10086_v6 = o.lost_rate.into();
+        stat.time_10086_v6 = o.ping_time.into();
     }
 }
