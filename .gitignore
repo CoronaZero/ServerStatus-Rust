@@ -26,3 +26,6 @@ sync.sh
 .server_status_sys_id
 venv
 tls
+
+# Claude
+.claude/
