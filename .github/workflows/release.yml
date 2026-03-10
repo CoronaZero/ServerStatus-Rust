@@ -92,15 +92,10 @@ jobs:
           components: clippy,rustfmt
 
       - name: Install Cross
-        run: |
-          cargo install cross --git https://github.com/cross-rs/cross
-          export PATH="$HOME/.cargo/bin:$PATH"
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        uses: cross-rs/cross-action@v0.2
 
       - name: Build release
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cross build --release --locked --target ${{ matrix.platform.target }}
+        run: cross build --release --locked --target ${{ matrix.platform.target }}
 
       - name: Strip & UPX
         continue-on-error: true
