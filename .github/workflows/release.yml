@@ -33,9 +33,11 @@ jobs:
           else
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
+        shell: bash
 
       - name: Install Protoc
         run: brew install protobuf
+        shell: bash
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -43,6 +45,7 @@ jobs:
 
       - name: Build release
         run: cargo build --release --locked --target ${{ matrix.platform.target }}
+        shell: bash
 
       - name: Strip & UPX
         continue-on-error: true
@@ -97,11 +100,13 @@ jobs:
           else
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
+        shell: bash
 
       - name: Install Protoc & Utils
         run: |
           sudo apt-get update -y -qq
           sudo apt-get install -y -qq protobuf-compiler zip
+        shell: bash
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -113,18 +118,25 @@ jobs:
         run: |
           cargo install cross
           echo "/tmp/cargo/bin" >> $GITHUB_PATH
+        shell: bash
 
       - name: Build release
         run: cross build --release --locked --target ${{ matrix.platform.target }}
+        shell: bash
 
-      - name: Strip & UPX
+      - name: Install UPX and Strip
+        run: |
+          sudo apt-get install -y upx
+          strip target/${{ matrix.platform.target }}/release/stat_server
+          strip target/${{ matrix.platform.target }}/release/stat_client
+        shell: bash
+
+      - name: UPX compress
         continue-on-error: true
-        uses: svenstaro/upx-action@v2
-        with:
-          files: |
-            target/${{ matrix.platform.target }}/release/stat_server
-            target/${{ matrix.platform.target }}/release/stat_client
-          args: --best --lzma
+        run: |
+          upx --best --lzma target/${{ matrix.platform.target }}/release/stat_server
+          upx --best --lzma target/${{ matrix.platform.target }}/release/stat_client
+        shell: bash
 
       - name: Zip Release
         uses: TheDoctor0/zip-release@0.7.6
@@ -179,6 +191,7 @@ jobs:
           else
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
+        shell: bash
 
       - name: Install Protoc
         run: |
@@ -196,6 +209,7 @@ jobs:
       - name: Install Cross
         if: matrix.platform.use-cross
         run: cargo install cross --git https://github.com/cross-rs/cross
+        shell: bash
 
       - name: Build release
         run: |
@@ -206,14 +220,23 @@ jobs:
           fi
         shell: bash
 
-      - name: Strip & UPX
+      - name: Install UPX and Strip
+        run: |
+          if [ "${{ matrix.platform.os }}" = "windows-latest" ]; then
+            choco install upx
+          else
+            sudo apt-get install -y upx
+          fi
+          strip target/${{ matrix.platform.target }}/release/stat_server${{matrix.platform.suffix}}
+          strip target/${{ matrix.platform.target }}/release/stat_client${{matrix.platform.suffix}}
+        shell: bash
+
+      - name: UPX compress
         continue-on-error: true
-        uses: svenstaro/upx-action@v2
-        with:
-          files: |
-            target/${{ matrix.platform.target }}/release/stat_server${{matrix.platform.suffix}}
-            target/${{ matrix.platform.target }}/release/stat_client${{matrix.platform.suffix}}
-          args: --best --lzma
+        run: |
+          upx --best --lzma target/${{ matrix.platform.target }}/release/stat_server${{matrix.platform.suffix}}
+          upx --best --lzma target/${{ matrix.platform.target }}/release/stat_client${{matrix.platform.suffix}}
+        shell: bash
 
       # 修复：显式拷贝文件到统一目录，避免 Windows 打包找不到路径
       - name: Prepare Assets
