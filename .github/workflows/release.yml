@@ -92,7 +92,9 @@ jobs:
           components: clippy,rustfmt
 
       - name: Install Cross
-        uses: cross-rs/cross-action@v0.2
+        run: |
+          cargo install cross
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Build release
         run: cross build --release --locked --target ${{ matrix.platform.target }}
