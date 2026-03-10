@@ -94,7 +94,7 @@ jobs:
       - name: Install Cross
         run: |
           cargo install cross
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "/tmp/cargo/bin" >> $GITHUB_PATH
 
       - name: Build release
         run: cross build --release --locked --target ${{ matrix.platform.target }}
