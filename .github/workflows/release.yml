@@ -74,20 +74,22 @@ jobs:
         platform:
           - target: "x86_64-unknown-linux-musl"
           - target: "aarch64-unknown-linux-musl"
-    container:
-      image: docker://ghcr.io/rust-cross/rust-musl-cross:${{ matrix.platform.target }}
+    env:
+      RUSTUP_HOME: /tmp/rustup
+      CARGO_HOME: /tmp/cargo
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Protoc & Utils
         run: |
-          apt-get update -y -qq
-          apt-get install -y -qq protobuf-compiler zip git llvm
+          sudo apt-get update -y -qq
+          sudo apt-get install -y -qq protobuf-compiler zip
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.target }}
+          components: clippy,rustfmt
 
       - name: Build release
         run: cargo build --release --locked --target ${{ matrix.platform.target }}
